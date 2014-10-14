@@ -14,6 +14,7 @@ SETTINGS = {
     'SVT': {
         'corpus_fn': ["/Users/jaderberg/Data/TextSpotting/DataDump/svt1/svt_lex_lower.txt",
                       "/mnt/sharedscratch/users/max/nips2014/svt1/svt_lex_lower.txt"],
+        'corpus_unkprob': 0.01,
         'fontstate':{
             'font_list': ["/Users/jaderberg/Data/TextSpotting/googlefonts/fontlist_good_8.5.14.txt",
                       "/mnt/sharedscratch/users/max/nips2014/googlefonts/fontlist_good_8.5.14.txt"],
@@ -32,6 +33,7 @@ SETTINGS = {
     'ICDAR': {
         'corpus_fn': ["/Users/jaderberg/Data/TextSpotting/DataDump/SceneTrialTest/nipslex.txt",
                       "/mnt/sharedscratch/users/max/nips2014/icdar2003/nipslex.txt"],
+        'corpus_unkprob': 0.01,
         'fontstate':{
             'font_list': ["/Users/jaderberg/Data/TextSpotting/googlefonts/fontlist_good_8.5.14.txt",
                       "/mnt/sharedscratch/users/max/nips2014/googlefonts/fontlist_good_8.5.14.txt"],
@@ -50,6 +52,7 @@ SETTINGS = {
     '50kDICT': {
         'corpus_fn': ["/Users/jaderberg/Data/TextSpotting/nips2014/lex50k.txt",
                       "/mnt/sharedscratch/users/max/nips2014/lex50k.txt"],
+        'corpus_unkprob': 0.01,
         'fontstate':{
             'font_list': ["/Users/jaderberg/Data/TextSpotting/googlefonts/fontlist_good_8.5.14.txt",
                       "/mnt/sharedscratch/users/max/nips2014/googlefonts/fontlist_good_8.5.14.txt"],
@@ -76,6 +79,7 @@ SETTINGS = {
     '90kDICT': {
         'corpus_fn': ["/Users/jaderberg/Data/TextSpotting/nips2014/lex50k_expanded.txt",
                       "/mnt/sharedscratch/users/max/nips2014/lex50k_expanded.txt"],
+        'corpus_unkprob': 0.01,
         'fontstate':{
             'font_list': ["/Users/jaderberg/Data/TextSpotting/googlefonts/fontlist_good_8.5.14.txt",
                       "/mnt/sharedscratch/users/max/nips2014/googlefonts/fontlist_good_8.5.14.txt"],
@@ -161,7 +165,7 @@ SETTINGS = {
 SAVE_GT = False
 
 suffix = ""
-NUM_TO_GENERATE = 10000
+NUM_TO_GENERATE = 1000
 NUM_PER_FOLDER = 500
 OUT_BASE = ["/Users/jaderberg/Data/TextSpotting/mjsynth/", "/mnt/sharedscratch/users/max/nips2014/mjsynth/"]
 SAMPLE_HEIGHT = 32
@@ -169,18 +173,19 @@ QUALITY = [80, 10]
 
 TARITUP = True
 BATCHTAR = False
-DELETE_AFTER_TAR = True
+DELETE_AFTER_TAR = False
 
 if __name__ == "__main__":
 
     iscluster = int(is_cluster())
 
     dataset = sys.argv[1]
-    out_dir = os.path.join(OUT_BASE[iscluster], "%s%dpx%s" % (dataset, SAMPLE_HEIGHT, suffix))
-
-    print 'Generating training data for %s, %dpx height to %s' % (dataset, SAMPLE_HEIGHT, out_dir)
 
     settings = SETTINGS[dataset]
+
+    out_dir = os.path.join(OUT_BASE[iscluster], "%s%s%dpx%s" % (dataset, "unk" if settings.get('corpus_unkprob',0) > 0 else "", SAMPLE_HEIGHT, suffix))
+
+    print 'Generating training data for %s, %dpx height to %s' % (dataset, SAMPLE_HEIGHT, out_dir)
 
     ngram_mode = settings.get('ngram_mode', False)
 
@@ -189,7 +194,7 @@ if __name__ == "__main__":
         corp_class = settings['corpus_class']
     except KeyError:
         corp_class = FileCorpus
-    corpus = corp_class(settings['corpus_fn'][iscluster])
+    corpus = corp_class(settings['corpus_fn'][iscluster], unk_probability=settings.get('corpus_unkprob',0))
     fontstate = FontState(font_list=settings['fontstate']['font_list'][iscluster])
     fontstate.random_caps = settings['fontstate']['random_caps']
     colourstate = TrainingCharsColourState(settings['trainingchars_fn'][iscluster])
@@ -242,7 +247,7 @@ if __name__ == "__main__":
     for i in crange(range(0, NUM_TO_GENERATE)):
         # gen sample
         try:
-            data = WR.generate_sample(outheight=SAMPLE_HEIGHT, random_crop=True, substring_crop=substr_crop)
+            data = WR.generate_sample(outheight=SAMPLE_HEIGHT, random_crop=True, substring_crop=substr_crop, char_annotations=(substr_crop>0))
         except Exception:
             print "\tERROR"
             continue
@@ -260,7 +265,7 @@ if __name__ == "__main__":
             fnstart = "%d_%s_%d" % (num_in_folder, data['text'], data['label']['word_label'])
 
         # save with random compression
-        quality = min(100, max(0, int(QUALITY[1]*n.random.randn() + QUALITY[0])))
+        quality = min(80, max(0, int(QUALITY[1]*n.random.randn() + QUALITY[0])))
         img = Image.fromarray(data['image'])
         if img.mode != 'RGB':
             img = img.convert('RGB')

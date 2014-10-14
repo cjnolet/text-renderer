@@ -127,6 +127,8 @@ class Corpus(object):
     """
     Defines a corpus of words
     """
+    valid_ascii = [48,49,50,51,52,53,54,55,56,57,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90]
+
     def __init__(self):
         self.corpus = ""
         self.corpus_list = []
@@ -137,7 +139,7 @@ class TestCorpus(Corpus):
     """
     CORPUS_FN = "./corpus.txt"
 
-    def __init__(self):
+    def __init__(self, unk_probability=0):
         self.corpus_text = ""
         pattern = re.compile('[^a-zA-Z0-9 ]')
         for line in open(self.CORPUS_FN):
@@ -146,6 +148,7 @@ class TestCorpus(Corpus):
             self.corpus_text = self.corpus_text + line
         self.corpus_text = ''.join(c for c in self.corpus_text if c.isalnum() or c.isspace())
         self.corpus_list = self.corpus_text.split()
+        self.unk_probability = unk_probability
 
     def get_sample(self, length=None):
         """
@@ -171,15 +174,35 @@ class TestCorpus(Corpus):
             count += 1
             if count > breakamount:
                 raise Exception("Unable to generate a good corpus sample")
+        if n.random.rand() < self.unk_probability:
+            # change some letters to make it random
+            ntries = 0
+            while True:
+                ntries += 1
+                if len(samp) > 2:
+                    n_to_change = n.random.randint(2, len(samp))
+                else:
+                    n_to_change = max(1, len(samp) - 1)
+                idx_to_change = n.random.permutation(len(samp))[0:n_to_change]
+                samp = list(samp)
+                for idx in idx_to_change:
+                    samp[idx] = chr(random.choice(self.valid_ascii))
+                samp = "".join(samp)
+                if samp not in self.corpus_list:
+                    idx = len(self.corpus_list)
+                    break
+                if ntries > 10:
+                    idx = self.corpus_list.index(samp)
+                    break
         return samp, idx
 
 class SVTCorpus(TestCorpus):
     CORPUS_FN = "/Users/jaderberg/Data/TextSpotting/DataDump/svt1/svt_lex_lower.txt"
 
 class FileCorpus(TestCorpus):
-    def __init__(self, fn):
+    def __init__(self, fn, unk_probability=0):
         self.CORPUS_FN = fn
-        TestCorpus.__init__(self)
+        TestCorpus.__init__(self, unk_probability=unk_probability)
 
 class NgramCorpus(TestCorpus):
     """
@@ -360,13 +383,15 @@ class ElasticDistortionState(object):
     Defines a random state for elastic distortions
     """
     displacement_range = 1
-    alpha_dist = [15, 30]
-    sigma = [8, 2]
-    min_sigma = 3
+    alpha_dist = [[15, 30], [0, 2]]
+    sigma = [[8, 2], [0.2, 0.2]]
+    min_sigma = [4, 0]
 
     def sample_transformation(self, imsz):
-        sigma = max(self.min_sigma, n.abs(self.sigma[1]*n.random.randn() + self.sigma[0]))
-        alpha = n.random.uniform(self.alpha_dist[0], self.alpha_dist[1])
+        choices = len(self.alpha_dist)
+        c = int(n.random.randint(0, choices))
+        sigma = max(self.min_sigma[c], n.abs(self.sigma[c][1]*n.random.randn() + self.sigma[c][0]))
+        alpha = n.random.uniform(self.alpha_dist[c][0], self.alpha_dist[c][1])
         dispmapx = n.random.uniform(-1*self.displacement_range, self.displacement_range, size=imsz)
         dispmapy = n.random.uniform(-1*self.displacement_range, self.displacement_range, size=imsz)
         dispmapx = alpha * ndimage.gaussian_filter(dispmapx, sigma)
@@ -825,7 +850,7 @@ class WordRenderer(object):
         arr = ndimage.map_coordinates(origarr, coords, order=1, mode='nearest')
         return arr.reshape(origarr.shape)
 
-    def generate_sample(self, display_text=None, display_text_length=None, outheight=None, pygame_display=False, random_crop=False, substring_crop=-1):
+    def generate_sample(self, display_text=None, display_text_length=None, outheight=None, pygame_display=False, random_crop=False, substring_crop=-1, char_annotations=False):
         """
         This generates the full text sample
         """
@@ -1014,15 +1039,15 @@ class WordRenderer(object):
         l1_arr[...,1] = self.apply_perspective_arr(l1_arr[...,1], affstate, perstate)
         if fs['border']:
             l2_arr[...,1] = self.apply_perspective_arr(l2_arr[...,1], affstate, perstate)
-        char_bbs = self.apply_perspective_rectim(char_bbs, l1_arr[...,1], affstate, perstate)
+        if char_annotations:
+            char_bbs = self.apply_perspective_rectim(char_bbs, l1_arr[...,1], affstate, perstate)
+            # order char_bbs by left to right
+            xvals = [bb.x for bb in char_bbs]
+            idx = [i[0] for i in sorted(enumerate(xvals), key=lambda x:x[1])]
+            char_bbs = [char_bbs[i] for i in idx]
 
-        # order char_bbs by left to right
-        xvals = [bb.x for bb in char_bbs]
-        idx = [i[0] for i in sorted(enumerate(xvals), key=lambda x:x[1])]
-        char_bbs = [char_bbs[i] for i in idx]
 
-
-        if n.random.rand() < substring_crop and len(display_text) > 4:
+        if n.random.rand() < substring_crop and len(display_text) > 4 and char_annotations:
             # randomly crop to just a sub-string of the word
             start = n.random.randint(0, len(display_text)-1)
             stop = n.random.randint(min(start+1,len(display_text)), len(display_text))
@@ -1046,9 +1071,10 @@ class WordRenderer(object):
         l1_arr = self.imcrop(l1_arr, bb)
         if fs['border']:
             l2_arr = self.imcrop(l2_arr, bb)
-        # adjust char bbs
-        for char_bb in char_bbs:
-            char_bb.move_ip(-bb.x, -bb.y)
+        if char_annotations:
+            # adjust char bbs
+            for char_bb in char_bbs:
+                char_bb.move_ip(-bb.x, -bb.y)
         canvas = (255*n.ones(l1_arr.shape)).astype(l1_arr.dtype)
         canvas[...,0] = cs[1]
 
@@ -1079,11 +1105,6 @@ class WordRenderer(object):
             print "\tfillimage error"
             return None
 
-        # ensure enough contrast in image
-        canvas_mean = self.mean_val(canvas)
-        l1_mean = self.mean_val(l1_arr)
-        l2_mean = self.mean_val(l2_arr) if fs['border'] else None
-
 
         # add per-surface distortions
         l1_arr = self.surface_distortions(l1_arr)
@@ -1102,7 +1123,7 @@ class WordRenderer(object):
             globalcanvas = globalcanvas[...,0]
             std = n.std(globalcanvas.flatten())
             count += 1
-            if std > 10:
+            if std > 20:
                 break
             if count > 10:
                 print "\tcan't get good contrast"
@@ -1121,16 +1142,14 @@ class WordRenderer(object):
 
         # resize
         if outheight is not None:
-            char_bbs = self.resize_rects(char_bbs, canvas, outheight)
+            if char_annotations:
+                char_bbs = self.resize_rects(char_bbs, canvas, outheight)
             canvas = resize_image(canvas, newh=outheight)
 
 
 
 
         # FINISHED, SHOW ME SOMETHING
-        # pyplot.imshow(canvas[...,0].swapaxes(0,1), cmap=cm.Greys_r)
-        # pyplot.show()
-
         if pygame_display:
             rgb_canvas = self.stack_arr((canvas, canvas, canvas))
             canvas_surf = pygame.surfarray.make_surface(rgb_canvas.swapaxes(0,1))
@@ -1159,7 +1178,7 @@ if __name__ == "__main__":
     fs = FontState()
     # fs.border = 1.0
 
-    WR = WordRenderer(fontstate=fs, fillimstate=fillimstate, colourstate=TrainingCharsColourState)
+    WR = WordRenderer(fontstate=fs, fillimstate=fillimstate, colourstate=TrainingCharsColourState, corpus=SVTCorpus(unk_probability=0.5))
     while True:
         data = WR.generate_sample(pygame_display=True, substring_crop=0, random_crop=True)
         if data is not None:
