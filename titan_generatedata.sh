@@ -17,7 +17,7 @@ export PYTHONPATH=/users/max/Programs/commonPy/lib/python/PIL:$PYTHONPATH
 
 source /users/max/Work/virtual_envs/paintings_env/bin/activate
 
-cd /users/max/Work/nips2014/textrender
+cd /users/max/Work/text-renderer
 
 export ISTITAN=1
 

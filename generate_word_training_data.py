@@ -3,7 +3,7 @@
 import sys
 import os
 from titan_utils import is_cluster, get_task_id, crange
-from word_renderer import WordRenderer, FontState, FileCorpus, TrainingCharsColourState, SVTFillImageState, wait_key, NgramCorpus
+from word_renderer import WordRenderer, FontState, FileCorpus, TrainingCharsColourState, SVTFillImageState, wait_key, NgramCorpus, RandomCorpus
 from scipy.io import savemat
 import Image
 import numpy as n
@@ -11,10 +11,46 @@ import tarfile
 
 SETTINGS = {
     #####################################
+    'RAND10': {
+        'corpus_class': RandomCorpus,
+        'corpus_args': {'min_length': 1, 'max_length': 10},
+        'fontstate':{
+            'font_list': ["/Users/jaderberg/Data/TextSpotting/googlefonts/fontlist_good_8.5.14.txt",
+                      "/mnt/sharedscratch/users/max/nips2014/googlefonts/fontlist_good_8.5.14.txt"],
+            'random_caps': 1,  # the corpus is NOT case sensitive so train with all sorts of caps
+        },
+        'trainingchars_fn': ["/Users/jaderberg/Data/TextSpotting/mjchars/nips_training.mat",
+                             "/mnt/sharedscratch/users/max/nips2014/nips_training.mat"],
+        'fillimstate': {
+            'data_dir': ["/Users/jaderberg/Data/TextSpotting/DataDump/svt1",
+                         "/mnt/sharedscratch/users/max/nips2014/svt1"],
+            'gtmat_fn': ["/Users/jaderberg/Data/TextSpotting/DataDump/svt1/SVT-train.mat",
+                         "/mnt/sharedscratch/users/max/nips2014/svt1/SVT-train.mat"],
+        }
+    },
+    #####################################
+    'RAND23': {
+        'corpus_class': RandomCorpus,
+        'corpus_args': {'min_length': 1, 'max_length': 23},
+        'fontstate':{
+            'font_list': ["/Users/jaderberg/Data/TextSpotting/googlefonts/fontlist_good_8.5.14.txt",
+                      "/mnt/sharedscratch/users/max/nips2014/googlefonts/fontlist_good_8.5.14.txt"],
+            'random_caps': 1,  # the corpus is NOT case sensitive so train with all sorts of caps
+        },
+        'trainingchars_fn': ["/Users/jaderberg/Data/TextSpotting/mjchars/nips_training.mat",
+                             "/mnt/sharedscratch/users/max/nips2014/nips_training.mat"],
+        'fillimstate': {
+            'data_dir': ["/Users/jaderberg/Data/TextSpotting/DataDump/svt1",
+                         "/mnt/sharedscratch/users/max/nips2014/svt1"],
+            'gtmat_fn': ["/Users/jaderberg/Data/TextSpotting/DataDump/svt1/SVT-train.mat",
+                         "/mnt/sharedscratch/users/max/nips2014/svt1/SVT-train.mat"],
+        }
+    },
+    #####################################
     'SVT': {
         'corpus_fn': ["/Users/jaderberg/Data/TextSpotting/DataDump/svt1/svt_lex_lower.txt",
                       "/mnt/sharedscratch/users/max/nips2014/svt1/svt_lex_lower.txt"],
-        'corpus_unkprob': 0.01,
+        'corpus_unkprob': 0.0,
         'fontstate':{
             'font_list': ["/Users/jaderberg/Data/TextSpotting/googlefonts/fontlist_good_8.5.14.txt",
                       "/mnt/sharedscratch/users/max/nips2014/googlefonts/fontlist_good_8.5.14.txt"],
@@ -33,7 +69,7 @@ SETTINGS = {
     'ICDAR': {
         'corpus_fn': ["/Users/jaderberg/Data/TextSpotting/DataDump/SceneTrialTest/nipslex.txt",
                       "/mnt/sharedscratch/users/max/nips2014/icdar2003/nipslex.txt"],
-        'corpus_unkprob': 0.01,
+        'corpus_unkprob': 0.0,
         'fontstate':{
             'font_list': ["/Users/jaderberg/Data/TextSpotting/googlefonts/fontlist_good_8.5.14.txt",
                       "/mnt/sharedscratch/users/max/nips2014/googlefonts/fontlist_good_8.5.14.txt"],
@@ -79,7 +115,34 @@ SETTINGS = {
     '90kDICT': {
         'corpus_fn': ["/Users/jaderberg/Data/TextSpotting/nips2014/lex50k_expanded.txt",
                       "/mnt/sharedscratch/users/max/nips2014/lex50k_expanded.txt"],
-        'corpus_unkprob': 0.01,
+        'corpus_unkprob': 0.0,
+        'fontstate':{
+            'font_list': ["/Users/jaderberg/Data/TextSpotting/googlefonts/fontlist_good_8.5.14.txt",
+                      "/mnt/sharedscratch/users/max/nips2014/googlefonts/fontlist_good_8.5.14.txt"],
+            'random_caps': 1,  # the corpus is NOT case sensitive so train with all sorts of caps
+        },
+        'trainingchars_fn': ["/Users/jaderberg/Data/TextSpotting/mjchars/nips_training.mat",
+                             "/mnt/sharedscratch/users/max/nips2014/nips_training.mat"],
+        'fillimstate': [
+            {
+                'data_dir': ["/Users/jaderberg/Data/TextSpotting/DataDump/svt1",
+                             "/mnt/sharedscratch/users/max/nips2014/svt1"],
+                'gtmat_fn': ["/Users/jaderberg/Data/TextSpotting/DataDump/svt1/SVT-train.mat",
+                             "/mnt/sharedscratch/users/max/nips2014/svt1/SVT-train.mat"],
+            },
+            {
+                'data_dir': ["/Users/jaderberg/Data/TextSpotting/DataDump/SceneTrialTest",
+                             "/mnt/sharedscratch/users/max/nips2014/icdar2003"],
+                'gtmat_fn': ["/Users/jaderberg/Data/TextSpotting/DataDump/SceneTrialTest/ICDAR2003_words_test.mat",
+                             "/mnt/sharedscratch/users/max/nips2014/icdar2003/ICDAR2003_words_test.mat"],
+            }
+        ]
+    },
+    #####################################
+    '90kIIITDICT': {
+        'corpus_fn': ["/Users/jaderberg/Data/TextSpotting/nips2014/lex90k_IIITbig.txt",
+                      "/mnt/sharedscratch/users/max/nips2014/lex90k_IIITbig.txt"],
+        'corpus_unkprob': 0.0,
         'fontstate':{
             'font_list': ["/Users/jaderberg/Data/TextSpotting/googlefonts/fontlist_good_8.5.14.txt",
                       "/mnt/sharedscratch/users/max/nips2014/googlefonts/fontlist_good_8.5.14.txt"],
@@ -165,15 +228,15 @@ SETTINGS = {
 SAVE_GT = False
 
 suffix = ""
-NUM_TO_GENERATE = 1000
-NUM_PER_FOLDER = 500
+NUM_TO_GENERATE = 10000000
+NUM_PER_FOLDER = 1000
 OUT_BASE = ["/Users/jaderberg/Data/TextSpotting/mjsynth/", "/mnt/sharedscratch/users/max/nips2014/mjsynth/"]
 SAMPLE_HEIGHT = 32
 QUALITY = [80, 10]
 
 TARITUP = True
 BATCHTAR = False
-DELETE_AFTER_TAR = False
+DELETE_AFTER_TAR = True
 
 if __name__ == "__main__":
 
@@ -190,11 +253,14 @@ if __name__ == "__main__":
     ngram_mode = settings.get('ngram_mode', False)
 
     # init providers
-    try:
+    if 'corpus_class' in settings:
         corp_class = settings['corpus_class']
-    except KeyError:
+    else:
         corp_class = FileCorpus
-    corpus = corp_class(settings['corpus_fn'][iscluster], unk_probability=settings.get('corpus_unkprob',0))
+    if 'corpus_args' in settings:
+        corpus = corp_class(settings['corpus_args'])
+    else:
+        corpus = corp_class()
     fontstate = FontState(font_list=settings['fontstate']['font_list'][iscluster])
     fontstate.random_caps = settings['fontstate']['random_caps']
     colourstate = TrainingCharsColourState(settings['trainingchars_fn'][iscluster])
@@ -237,7 +303,11 @@ if __name__ == "__main__":
     # save the lexicon classes
     if task_id == 1:
         if not ngram_mode:
-            savemat(os.path.join(out_dir, "lexicon.mat"),  {'lexicon': corpus.corpus_list})
+            try:
+                savemat(os.path.join(out_dir, "lexicon.mat"),  {'lexicon': corpus.corpus_list})
+            except AttributeError:
+                # no corpus_list
+                pass
         else:
             savemat(os.path.join(out_dir, "lexicon.mat"),  {'lexicon': corpus.words, 'ngramidx': corpus.idx, 'ngramcount': corpus.values})
 
@@ -266,7 +336,12 @@ if __name__ == "__main__":
 
         # save with random compression
         quality = min(80, max(0, int(QUALITY[1]*n.random.randn() + QUALITY[0])))
-        img = Image.fromarray(data['image'])
+        try:
+            img = Image.fromarray(data['image'])
+        except Exception:
+            print "\tbad image generated"
+            continue
+
         if img.mode != 'RGB':
             img = img.convert('RGB')
         imfn = os.path.join(folder, fnstart + ".jpg")

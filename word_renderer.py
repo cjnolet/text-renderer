@@ -130,8 +130,7 @@ class Corpus(object):
     valid_ascii = [48,49,50,51,52,53,54,55,56,57,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90]
 
     def __init__(self):
-        self.corpus = ""
-        self.corpus_list = []
+        pass
 
 class TestCorpus(Corpus):
     """
@@ -139,7 +138,7 @@ class TestCorpus(Corpus):
     """
     CORPUS_FN = "./corpus.txt"
 
-    def __init__(self, unk_probability=0):
+    def __init__(self, args={'unk_probability': 0}):
         self.corpus_text = ""
         pattern = re.compile('[^a-zA-Z0-9 ]')
         for line in open(self.CORPUS_FN):
@@ -148,7 +147,7 @@ class TestCorpus(Corpus):
             self.corpus_text = self.corpus_text + line
         self.corpus_text = ''.join(c for c in self.corpus_text if c.isalnum() or c.isspace())
         self.corpus_list = self.corpus_text.split()
-        self.unk_probability = unk_probability
+        self.unk_probability = args['unk_probability']
 
     def get_sample(self, length=None):
         """
@@ -200,18 +199,18 @@ class SVTCorpus(TestCorpus):
     CORPUS_FN = "/Users/jaderberg/Data/TextSpotting/DataDump/svt1/svt_lex_lower.txt"
 
 class FileCorpus(TestCorpus):
-    def __init__(self, fn, unk_probability=0):
-        self.CORPUS_FN = fn
-        TestCorpus.__init__(self, unk_probability=unk_probability)
+    def __init__(self, args):
+        self.CORPUS_FN = args['fn']
+        TestCorpus.__init__(self, args)
 
 class NgramCorpus(TestCorpus):
     """
     Spits out a word sample, dictionary label, and ngram encoding labels
     """
-    def __init__(self, encoding_fn_base):
-        words_fn = encoding_fn_base + '_words.txt'
-        idx_fn = encoding_fn_base + '_idx.txt'
-        values_fn = encoding_fn_base + '_values.txt'
+    def __init__(self, args):
+        words_fn = args['encoding_fn_base'] + '_words.txt'
+        idx_fn = args['encoding_fn_base'] + '_idx.txt'
+        values_fn = args['encoding_fn_base'] + '_values.txt'
 
         self.words = self._load_list(words_fn)
         self.idx = self._load_list(idx_fn, split=' ', tp=int)
@@ -258,6 +257,23 @@ class NgramCorpus(TestCorpus):
                 l = tp(l)
             arr.append(l)
         return arr
+
+class RandomCorpus(Corpus):
+    """
+    Generates random strings
+    """
+    def __init__(self, args={'min_length': 1, 'max_length': 23}):
+        self.min_length = args['min_length']
+        self.max_length = args['max_length']
+
+    def get_sample(self, length=None):
+        if length is None:
+            length = random.randint(self.min_length, self.max_length)
+        samp = ""
+        for i in range(length):
+            samp = samp + chr(random.choice(self.valid_ascii))
+        return samp, length
+
 
 
 class FontState(object):
@@ -504,10 +520,12 @@ class FillImageState(object):
         imsz = baseim.shape
         surfsz = surfarr.shape
 
+
+
         # don't resize bigger than if at the original size, the text was less than min_textheight
         max_factor = float(surfsz[0])/self.min_textheight
         # don't resize smaller than it is smaller than a dimension of the surface
-        min_factor = max(float(surfsz[0])/float(imsz[0]), float(surfsz[1])/float(imsz[1]))
+        min_factor = max(float(surfsz[0] + 5)/float(imsz[0]), float(surfsz[1] + 5)/float(imsz[1]))
         # sample a resize factor
         factor = max(min_factor, min(max_factor, ((max_factor-min_factor)/1.5)*n.random.randn() + max_factor))
         sampleim = resize_image(baseim, factor)
@@ -551,8 +569,8 @@ class DistortionState(object):
     sharpen = 0
     sharpen_amount = [30, 10]
     noise = 4
-    resample = 0.5
-    resample_range = [16, 32]
+    resample = 0.1
+    resample_range = [24, 32]
 
     def get_sample(self):
         return {
@@ -572,7 +590,7 @@ class SurfaceDistortionState(DistortionState):
 class BaselineState(object):
     curve = lambda this, a: lambda x: a*x*x
     differential = lambda this, a: lambda x: 2*a*x
-    a = [0, 0.5]
+    a = [0, 0.1]
 
     def get_sample(self):
         """
@@ -860,7 +878,7 @@ class WordRenderer(object):
             pygame.display.set_caption('WordRenderer')
 
         # clear bg
-        bg_surf = pygame.Surface(self.sz, SRCALPHA, 32)
+        # bg_surf = pygame.Surface(self.sz, SRCALPHA, 32)
         #bg_surf = bg_surf.convert_alpha()
 
         if display_text is None:
@@ -874,6 +892,10 @@ class WordRenderer(object):
 
         # get a new font state
         fs = self.fontstate.get_sample()
+
+        # clear bg
+        # bg_surf = pygame.Surface(self.sz, SRCALPHA, 32)
+        bg_surf = pygame.Surface((round(2.0 * fs['size'] * len(display_text)), self.sz[1]), SRCALPHA, 32)
 
         font = freetype.Font(fs['font'], size=fs['size'])
 
@@ -931,7 +953,7 @@ class WordRenderer(object):
             newrect = font.get_rect(c)
             newrect.y = last_rect.y
             newrect.topleft = (last_rect.topright[0] + char_spacing*char_fact, newrect.topleft[1])
-            newrect.centery +=  curve[mid_idx+i+1]
+            newrect.centery = max(0 + newrect.height*1, min(self.sz[1] - newrect.height*1, newrect.centery + curve[mid_idx+i+1]))
             try:
                 bbrect = font.render_to(bg_surf, newrect, c, rotation=rotations[mid_idx+i+1])
             except ValueError:
@@ -949,7 +971,7 @@ class WordRenderer(object):
             newrect = font.get_rect(c)
             newrect.y = last_rect.y
             newrect.topright = (last_rect.topleft[0] - char_spacing*char_fact, newrect.topleft[1])
-            newrect.centery +=  curve[mid_idx-i-1]
+            newrect.centery = max(0 + newrect.height*1, min(self.sz[1] - newrect.height*1, newrect.centery + curve[mid_idx-i-1]))
             try:
                 bbrect = font.render_to(bg_surf, newrect, c, rotation=rotations[mid_idx-i-1])
             except ValueError:
@@ -1067,6 +1089,7 @@ class WordRenderer(object):
             inflate_amount = int(0.4*bb[3])
             bb.inflate_ip(inflate_amount, inflate_amount)
 
+
         # crop image
         l1_arr = self.imcrop(l1_arr, bb)
         if fs['border']:
@@ -1101,7 +1124,7 @@ class WordRenderer(object):
             l1_arr = self.add_fillimage(l1_arr)
             if fs['border']:
                 l2_arr = self.add_fillimage(l2_arr)
-        except IndexError:
+        except Exception:
             print "\tfillimage error"
             return None
 
@@ -1131,8 +1154,8 @@ class WordRenderer(object):
         canvas = globalcanvas
 
         # do elastic distortion described by http://research.microsoft.com/pubs/68920/icdar03.pdf
-        dispx, dispy = self.elasticstate.sample_transformation(canvas.shape)
-        canvas = self.apply_distortion_maps(canvas, dispx, dispy)
+        # dispx, dispy = self.elasticstate.sample_transformation(canvas.shape)
+        # canvas = self.apply_distortion_maps(canvas, dispx, dispy)
 
         # add global distortions
         canvas = self.global_distortions(canvas)
@@ -1163,6 +1186,8 @@ class WordRenderer(object):
         #pyplot.imshow(self.get_image())
         #pyplot.show()
 
+        # print char_bbs[0]
+
         return {
             'image': canvas,
             'text': display_text,
@@ -1178,23 +1203,25 @@ if __name__ == "__main__":
     fs = FontState()
     # fs.border = 1.0
 
-    WR = WordRenderer(fontstate=fs, fillimstate=fillimstate, colourstate=TrainingCharsColourState, corpus=SVTCorpus(unk_probability=0.5))
+    # corpus = SVTCorpus({'unk_probability': 0.5})
+    corpus = RandomCorpus({'min_length': 1, 'max_length': 10})
+    WR = WordRenderer(fontstate=fs, fillimstate=fillimstate, colourstate=TrainingCharsColourState, corpus=corpus)
     while True:
-        data = WR.generate_sample(pygame_display=True, substring_crop=0, random_crop=True)
+        data = WR.generate_sample(pygame_display=True, substring_crop=0, random_crop=True, char_annotations=True)
         if data is not None:
             print data['text']
         # save_screen_img(WR.screen, '/Users/jaderberg/Desktop/6.jpg', 70)
         wait_key()
 
-    WR = WordRenderer(fontstate=fs, fillimstate=fillimstate, corpus=Corpus, colourstate=TrainingCharsColourState)
-    towrite = "this allows us to generate unlimited training data!".split()
-    perrow = 4.0
-    rows = math.ceil(len(towrite)/perrow)
-    cols = int(perrow)
-    num = len(towrite)
-    for i, w in enumerate(towrite):
-        pyplot.subplot(rows, cols, i+1)
-        pyplot.imshow(WR.generate_sample(display_text=w, outheight=32)['image'], cmap=cm.Greys_r)
-        pyplot.axis('off')
-    pyplot.tight_layout()
-    pyplot.show()
+    # WR = WordRenderer(fontstate=fs, fillimstate=fillimstate, corpus=Corpus, colourstate=TrainingCharsColourState)
+    # towrite = "Worcester College Rocks".split()
+    # perrow = 4.0
+    # rows = math.ceil(len(towrite)/perrow)
+    # cols = int(perrow)
+    # num = len(towrite)
+    # for i, w in enumerate(towrite):
+    #     pyplot.subplot(rows, cols, i+1)
+    #     pyplot.imshow(WR.generate_sample(display_text=w, outheight=32)['image'], cmap=cm.Greys_r)
+    #     pyplot.axis('off')
+    # pyplot.tight_layout()
+    # pyplot.show()
